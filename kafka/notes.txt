@@ -1,0 +1,48 @@
+
+
+
+Kafka Benefits
+----
+
+Distributed
+Reliability
+Scalability
+Durability
+Performance
+Fault tolerance
+
+
+Components of Kafka
+---
+
+producer
+consumer
+broker
+zookeeper
+
+
+Topic
+
+
+•	A producer is process that can publish a message to a topic.
+•	a consumer is a process that can subscribe to one or more topics and consume messages published to topics.
+•	A topic category is the name of the feed to which messages are published.
+•	A broker is a process running on single machine.
+•	A cluster is a group of brokers working together.
+
+
+--------------
+
+--create topic
+bin/kafka-topics.sh --create --zookeeper localhost:2181 --replication-factor 1 --partitions 1 --topic <<topicname>>
+
+bin/kafka-topics.sh --describe --zookeeper localhost:2181 –topic <<topicname>>
+
+--list topics
+bin/kafka-topics.sh --list --zookeeper localhost:2181
+
+--start the producer instance
+bin/kafka-console-producer.sh --broker-list localhost:9092 --topic <<topicname>>
+
+--start consumer instance
+bin/kafka-console-consumer.sh --zookeeper localhost:2181 --topic <<topicname>> --from-beginning
