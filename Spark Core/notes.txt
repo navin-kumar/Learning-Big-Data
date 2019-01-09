@@ -1,0 +1,136 @@
+---
+
+
+
+Big Data Small Data
+So the million dollar question is how you define Big data.
+The Data that I was dealing with as a database developer and Architect in last decade was also quite Big , Was not that big data as well?
+So big data is not only about the data its about the problem you have with data spread across multiple system (distributed system) and you need a programming  abstraction without caring how many underlying machines are involved.
+Then All the paradigm , frameworks that allow us to deal with such a distributed piece of data (which is beyond capability of single machine) at the same time providing scalability , fault tolerance , parallelism and much more falls into big data ecosystem.
+In this series we will focus on the all the open source big data technologies.
+Hadoop and Map Reduce
+We talk about programming abstraction needed to deal with data on distributed system. The programming abstraction is provided by in map reduce data goes through three different phase
+These phases are namely map , shuffle and sort (optional) and reduce phase .
+Your big data problem has to fit into these phases i.e. counting number of occurence of each word across different files.
+1>Map phase : Count the number of occurence of word in each file
+File -1 (server-1)
+You-10 , Are-10,Good-10, Boy-10
+File -2 (server-2)
+You -10 are-10 so -10 good-10
+For the sake of simplicity assume that the files are on different server (*******) and you can utilize local resources (cpu/ram/hard-disk) for each file when your work count program runs on server. So when you invoke map you write your program as if it were to execute on single machine but two separate thread of program gets executed on server1 and server2 parallely as there is no dependencies
+1> Shuffle and sort :
+The data would be combine before it can be fed to reducer
+You (10), you(10)
+are(10), are(10)
+good(10), good(10)
+so (10) boy (10)
+3> Reduce Phase
+The all key value pair for given key across document goes to single machine
+i.e.
+you (10),you(10), are(10),are(10)- server-1
+good(10), good(10),so (10), boy (10):server2
+Reduce may involve additional grouping(TBC- apache doc)
+Reducer Output
+you (20), are(20),good(20),so (10), boy (10)
+*********
+It could be you have single large file then your data would be first distribute across machine for all map tasks to be executed in : The underlying process called as input splitter
+How Many Maps?
+
+The number of maps is usually driven by the total size of the inputs, that is, the total number of blocks of the input files.
+The right level of parallelism for maps seems to be around 10–100 maps per-node, although it has been set up to 300 maps for very cpu-light map tasks. Task setup takes awhile, so it is best if the maps take at least a minute to execute.
+Thus, if you expect 10TB of input data and have a blocksize of 128MB, you'll end up with 82,000 maps, unless setNumMapTasks(int) (which only provides a hint to the framework) is used to set it even higher.
+
+How Many Reduces?
+The right number of reduces seems to be 0.95 or 1.75 multiplied by (<no. of nodes> * mapred.tasktracker.reduce.tasks.maximum).
+With 0.95 all of the reduces can launch immediately and start transfering map outputs as the maps finish. With 1.75 the faster nodes will finish their first round of reduces and launch a second wave of reduces doing a much better job of load balancing.
+Increasing the number of reduces increases the framework overhead, but increases load balancing and lowers the cost of failures.
+The scaling factors above are slightly less than whole numbers to reserve a few reduce slots in the framework for speculative-tasks and failed tasks.
+Reducer NONE
+It is legal to set the number of reduce-tasks to zero if no reduction is desired.
+In this case the outputs of the map-tasks go directly to the FileSystem, into the output path set by setOutputPath(Path). The framework does not sort the map-outputs before writing them out to the FileSystem.
+Hadoop is distributed file system : HDFS
+This is created on top of unix file system.
+
+
+---
+
+SPARK
+
+
+What was the need ?
+So in the map reduce example data goes through through disk at each phase .
+map read the write kv pair
+shuffle : sort on disk
+reduce : read and write
+
+The Novelty of spark is it could extensively utilize RAM of the commodity hardware in distributed system, and in turn reducing the disk i/o to large extent.
+The primary abstraction provided by spark is RDD, which is Resilient Distributes Dataset.
+RDD are immutable once constructed
+Track lineage information to efficiently compute lost data
+ Enable operations on collections in parallel by way of partitioning. maximum parallelism => no. of partitions ≤ no. of worker machine.
+You can also persist or cache RDD in memory or disk.it cons
+
+We would go through some common terminology first before taking a high level take on SPARK core
+Driver : Java process to execute user program ,it consist of following elements.
+
+spark context: Spark program creates spark context object, Tell Spark how and where to access a cluster . Master parameter determine which type and size of cluster to use 
+      -local : one worker thread
+      -local(k) : locally with k worker thread ~ no. of cores
+      -spark//host:port: Connect to spark standalone cluster 
+       (default port :  7077) or connect to mesos cluster 
+       (default port :  5050)
+Actions:
+Transformation : map filter :New RDDs are created but not computed.
+Actions : Collect, Count and Reduce:Transformed RDDs are executed/computed when action runs on it .
+Partition and Task :
+Programmer Specify number of partitions for a RDD , Task is smallest unit work executed by worker and input dataset size for worker task is equivalent to RDD partition, so there is one task per partition.
+no of partitions >= no of cores => task is equally distributed among cores.
+Stage : 
+stage is the list of tasks that can be executed together as to avoid multiple read and other overheads.
+
+
+Spark Execution Model
+1. Create DAG of RDDs to represent computation
+2. Create logical execution plan for DAG
+3. Schedule and execute individual tasks
+Create RDD :
+For each load and Transformation action RDD is created 
+Create Execution Plan :
+Divide RDD into stages : Fuse different action together so that we do not have to go over data multiple times i.e. you can pipeline map and filter action together (you can pipeline until there is need to re-organize/group data in subsequent RDD i.e. Group by operation )
+i.e All consecutive RDD dealing with same level (granularity) of data can be fused together to create a common stage
+Schedule Task: 
+Break the stage into tasks , Input to a stage is initial or  intermediate data set (i.e. key value pairs) , the input can be broken to the level of RDD partition and a task is created for each partition.(multiple RDDs involved in a stage has same data volume in each partition)
+A task is Data+ computation
+Complete All task in a stage before moving on .
+So large number of tasks at partition level at each stage allow us to do parallel computation with minimal ideal time. (Suppose each task take 5 seconds) then when the last task is being executed on a machine, all other machine would be ideal for 5 seconds in a worst case scenario.
+large number of partitions => more tasks => better concurrency.
+
+
+
+
+Importance of Partition Tuning
+• Main issue: too few partitions
+– Less concurrency
+– More susceptible to data skew
+– Increased memory pressure for groupBy,reduceByKey, sortByKey, etc.
+• Secondary issue: too many partitions
+• Need "reasonable number" of partitions
+– Commonly between 100 and 10,000 partitions
+– Lower bound: At least ~2x number of cores in cluster
+– Upper bound: Ensure tasks take at least 100ms
+1. Ensure enough partitions for concurrency
+2. Minimize memory consumption (esp. of large groupBys and sorting)
+3. Minimize data shuffle
+4. Know the standard library
+Fixing Code (To minimize intermediate data set at the shuffle and sort phase: Group by)
+sc.textFile("hdfs:/names")
+.distinct(numPartitions = 6)
+.map(name => (name.charAt(0), 1))
+.reduceByKey(_ + _)
+.collect()
+Original:
+sc.textFile("hdfs:/names")
+.map(name => (name.charAt(0), name))
+.groupByKey()
+.mapValues { names => names.toSet.size }
+.collect()
